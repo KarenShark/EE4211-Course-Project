@@ -157,7 +157,10 @@ ax4.axvline(x=np.mean(valid_acc_values), color='red', linestyle='--', linewidth=
 ax4.legend(fontsize=9)
 
 plt.tight_layout()
-plt.savefig('/Users/hesiyu/Desktop/EE4211 Course Project/Visualizations/methods_comparison_detailed.png', 
+# Create output directory if it doesn't exist
+output_dir = os.path.join(os.path.dirname(__file__), 'Visualizations')
+os.makedirs(output_dir, exist_ok=True)
+plt.savefig(os.path.join(output_dir, 'methods_comparison_detailed.png'), 
             dpi=300, bbox_inches='tight')
 print("✓ Detailed comparison saved: Visualizations/methods_comparison_detailed.png")
 
@@ -208,7 +211,7 @@ add_value_labels(bars3)
 add_value_labels(bars4)
 
 plt.tight_layout()
-plt.savefig('/Users/hesiyu/Desktop/EE4211 Course Project/Visualizations/methods_comparison_combined.png', 
+plt.savefig(os.path.join(output_dir, 'methods_comparison_combined.png'), 
             dpi=300, bbox_inches='tight')
 print("✓ Combined comparison saved: Visualizations/methods_comparison_combined.png")
 
@@ -243,7 +246,7 @@ ax.legend(loc='upper right', bbox_to_anchor=(1.3, 1.1), fontsize=10)
 ax.grid(True, alpha=0.3)
 
 plt.tight_layout()
-plt.savefig('/Users/hesiyu/Desktop/EE4211 Course Project/Visualizations/methods_comparison_radar.png', 
+plt.savefig(os.path.join(output_dir, 'methods_comparison_radar.png'), 
             dpi=300, bbox_inches='tight')
 print("✓ Radar chart saved: Visualizations/methods_comparison_radar.png")
 
@@ -298,7 +301,7 @@ for i in range(1, len(table_data)):
 
 plt.title('Performance Metrics Summary Table\n(100% Training Data)', 
           fontsize=16, fontweight='bold', pad=20)
-plt.savefig('/Users/hesiyu/Desktop/EE4211 Course Project/Visualizations/methods_comparison_table.png', 
+plt.savefig(os.path.join(output_dir, 'methods_comparison_table.png'), 
             dpi=300, bbox_inches='tight')
 print("✓ Performance table saved: Visualizations/methods_comparison_table.png")
 
