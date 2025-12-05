@@ -63,6 +63,16 @@ All methods compared across different metrics (100% training data):
 
 *BBox refinement pipeline showing: Original → BBox → Basic Mask → GrabCut → CRF refinement.*
 
+#### Image-level CAM Pipeline
+![CAM Pipeline](Visualizations/cam_pipeline_heatmap%20visualization.png)
+
+*CAM (Class Activation Map) pipeline: Original Image → Grad-CAM Heatmap → CAM Overlay → Binary Mask → Ground Truth comparison. Shows how weakly-supervised image-level labels are converted to pixel-level pseudo-labels.*
+
+#### CAM with/without CRF Comparison
+![CAM CRF Comparison](Visualizations/Gradcam_with:without%20CRF%20Comparison.png)
+
+*Direct comparison of CAM results with and without CRF post-processing. CRF refinement significantly improves segmentation quality (+111% IoU improvement), effectively filling incomplete activations and refining boundaries.*
+
 #### Full Supervision Pipeline
 ![Full Supervision Pipeline](Visualizations/full_supervision_pipeline_visualization.png)
 
@@ -70,7 +80,7 @@ All methods compared across different metrics (100% training data):
 
 ### Sample Predictions
 
-#### Prediction Comparisons
+#### BBox Method Predictions
 <p float="left">
   <img src="Visualizations/prediction_grid_basic.png" width="32%" />
   <img src="Visualizations/prediction_grid_grabcut.png" width="32%" />
@@ -78,6 +88,19 @@ All methods compared across different metrics (100% training data):
 </p>
 
 *Sample predictions from BBox methods: (Left) Basic masks, (Middle) GrabCut refined, (Right) GrabCut+CRF refined.*
+
+#### Image-level CAM Predictions
+<p float="left">
+  <img src="Visualizations/pred_gradcam_no_crf.png" width="48%" />
+  <img src="Visualizations/pred_gradcam_crf.png" width="48%" />
+</p>
+
+*Sample predictions from CAM methods: (Left) CAM without CRF, (Right) CAM with CRF refinement. Note the significant improvement in boundary quality and completeness with CRF post-processing.*
+
+#### Full Supervision Predictions
+![DeepLab Predictions](Visualizations/deeplab_pred.png)
+
+*Sample predictions from Full Supervision (DeepLabV3+): Achieves the highest segmentation quality with pixel-perfect boundaries, serving as the baseline for comparison.*
 
 ## 🚀 Quick Start
 
