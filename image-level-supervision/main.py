@@ -14,7 +14,7 @@ warnings.filterwarnings("ignore", category=RuntimeWarning)
 parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(parent_dir)
 
-from utils import set_random_seed, get_data
+from ws_utils import set_random_seed, get_data
 from data import download_data
 from config import Config
 from vgg_train import train
@@ -48,11 +48,11 @@ def main(args):
         print(f"{'='*80}\n")
 
     if use_crf:
-        Config.DEEPLAB_MODEL_PATH = f"weakly-supervised/deeplabv3_crf.pth"
-        Config.SAVE_PATH = f"weakly-supervised/pred_crf.png"
+        Config.DEEPLAB_MODEL_PATH = f"image-level-supervision/deeplabv3_crf.pth"
+        Config.SAVE_PATH = f"image-level-supervision/pred_crf.png"
     else:
-        Config.DEEPLAB_MODEL_PATH = f"weakly-supervised/deeplabv3_no_crf.pth"
-        Config.SAVE_PATH = f"weakly-supervised/pred_no_crf.png"
+        Config.DEEPLAB_MODEL_PATH = f"image-level-supervision/deeplabv3_no_crf.pth"
+        Config.SAVE_PATH = f"image-level-supervision/pred_no_crf.png"
 
     #step1: set seed
     set_random_seed(Config.SEED)
@@ -89,15 +89,47 @@ def main(args):
         model = model.to(device)
         criterion = nn.CrossEntropyLoss()
         optimizer = optim.Adam(model.parameters(), lr=Config.LEARNING_RATE)
-        train(model, train_loader, val_loader, criterion, optimizer, device=Config.DEVICE, epochs=Config.VGG_TRAIN_EPOCHS)
+        
+        # Train and get metrics
+        final_metrics = train(model, train_loader, val_loader, criterion, optimizer, device=Config.DEVICE, epochs=Config.VGG_TRAIN_EPOCHS)
+        
+        # Traditional save
         torch.save(model.state_dict(), Config.MODEL_PATH)
+        print(f"Model saved to {Config.MODEL_PATH}")
+        
+        # Advanced checkpoint save
+        try:
+            sys.path.append(os.path.dirname(os.path.dirname(__file__)))
+            from utils import CheckpointManager
+            
+            ckpt_manager = CheckpointManager(save_dir="checkpoints")
+            config = {
+                'epochs': Config.VGG_TRAIN_EPOCHS,
+                'batch_size': Config.VGG_TRAIN_BATCH_SIZE,
+                'learning_rate': Config.LEARNING_RATE,
+                'optimizer': 'Adam',
+                'dataset': 'Oxford-IIIT Pet',
+                'num_classes': Config.NUM_CLASSES
+            }
+            metrics = {
+                'train_acc': final_metrics['train_acc'],
+                'val_acc': final_metrics['val_acc']
+            }
+            ckpt_manager.save_checkpoint(
+                model=model,
+                config=config,
+                metrics=metrics,
+                model_name='vgg16'
+            )
+        except Exception as e:
+            print(f"Warning: Advanced checkpoint save failed: {e}")
 
     #step5: generate cams 
     if os.path.exists(Config.OUTPUT_DIR):
         print("Processed images found. Skipping image generation.")
     else: 
         print(f"Generating Grad-CAM images.")
-        generate_vgg_cam_masks(OUTPUT_DIR=Config.OUTPUT_DIR, MODEL_PATH=Config.MODEL_PATH, device='cpu', data_percentage=data_percentage)
+        generate_vgg_cam_masks(OUTPUT_DIR=Config.OUTPUT_DIR, MODEL_PATH=Config.MODEL_PATH, device=device, data_percentage=data_percentage)
         
     #step6: train loss if saved model does not exist
     if os.path.exists(Config.DEEPLAB_MODEL_PATH):
@@ -108,13 +140,54 @@ def main(args):
                       CAM_MASK_DIR=Config.OUTPUT_DIR,
                       USE_CRF=use_crf,
                       num_epochs=Config.DEEPLAB_TRAIN_EPOCHS,
-                      device=device)
+                      device=device,
+                      binarize_masks=True,
+                      mask_threshold=0.05)
         
     #step7: evaluate trained model
     evaluate_deeplab_model(MODEL_PATH=Config.DEEPLAB_MODEL_PATH,
                            device=device,
                            SAVE_PATH=Config.SAVE_PATH,
-                           threshold=foreground_threshold)
+                           threshold=foreground_threshold,
+                           data_percentage=data_percentage)
+    
+    # Auto-backup to Google Drive if using full dataset
+    if data_percentage >= 0.99:
+        try:
+            sys.path.append(os.path.dirname(os.path.dirname(__file__)))
+            from utils.gdrive_backup import backup_to_gdrive, should_backup_to_gdrive
+            
+            if should_backup_to_gdrive(data_percentage):
+                print("\n🔄 Auto-backup: Detected full dataset training (100%)")
+                
+                # Backup VGG model
+                if os.path.exists(Config.MODEL_PATH):
+                    backup_to_gdrive(
+                        model_path=Config.MODEL_PATH,
+                        experiment_name="vgg16_classifier",
+                        metadata={
+                            "model": "VGG16",
+                            "dataset": "Oxford-IIIT Pet",
+                            "classes": 37,
+                            "data_percentage": data_percentage
+                        }
+                    )
+                
+                # Backup DeepLab model
+                if os.path.exists(Config.DEEPLAB_MODEL_PATH):
+                    backup_to_gdrive(
+                        model_path=Config.DEEPLAB_MODEL_PATH,
+                        experiment_name=f"weakly_{'crf' if use_crf else 'no_crf'}",
+                        metadata={
+                            "model": "DeepLabV3+",
+                            "supervision": "weakly",
+                            "use_crf": use_crf,
+                            "dataset": "Oxford-IIIT Pet",
+                            "data_percentage": data_percentage
+                        }
+                    )
+        except Exception as e:
+            print(f"⚠️  Auto-backup failed (non-critical): {e}")
 
 if __name__ == '__main__':
     """

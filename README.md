@@ -1,77 +1,290 @@
-# Annotation Matters: Evaluating Grad-CAM and Bounding Box Weak Supervision under Modular Segmentation with CRF Refinement
+# Evaluating Annotation Granularity Trade-offs in Semantic Segmentation: A Comprehensive Study on Performance, Cost, and Efficiency
 
-## Project Overview
-This project implements a weakly-supervised segmentation framework, comparing its performance to a fully-supervised baseline. Our approach uses weak supervision via bounding boxes and CAM-based methods, enhanced with CRF post-processing. The aim is to explore the trade-offs between weak and fully-supervised segmentation approaches and evaluate their efficacy with limited annotations.
+**Research Question**: How do different annotation granularities (pixel-level, bounding box, image-level) affect semantic segmentation performance, and what are the optimal trade-offs between annotation cost and model accuracy?
 
-## Part 1. Environment Setup (CPU-Compatible)
-Below are the instructions to set up the project environment for CPU-only execution. This includes both the base conda environment and the additional packages required for weakly-supervised segmentation.
+### 🎯 Research Value & Contributions
 
-### Step 1: Create and Activate the Conda Environment
+This study provides **quantitative evidence and practical insights** for annotation strategy selection in real-world semantic segmentation tasks:
+
+1. **Systematic Performance-Cost Analysis**: First comprehensive comparison of three annotation granularities (pixel, bbox, image-level) under controlled experimental conditions with identical model architecture (DeepLabV3) and dataset (Oxford-IIIT Pet)
+
+2. **Refinement Technique Evaluation**: Rigorous ablation studies quantifying the impact of post-processing methods (GrabCut, CRF) across different supervision levels, revealing that CRF provides +110% improvement for image-level methods but minimal effect (-0.15%) for bbox methods
+
+3. **Actionable Cost-Benefit Recommendations**: Demonstrates that image-level supervision with CAM+CRF achieves **76% of full supervision performance at only 3.3% of annotation cost** (10s vs 300s per image), providing clear guidance for budget-constrained projects
+
+4. **Reproducible Experimental Framework**: Open-source implementation with automated dataset management, standardized evaluation metrics (FG/BG IoU, Mean IoU, Pixel Accuracy), and comprehensive ablation studies enabling easy replication and extension
+
+## 📊 Project Overview
+
+This project compares three levels of annotation supervision for semantic segmentation:
+- **Full Supervision** (Pixel-level trimaps) - 300 sec/img
+- **BBox Supervision** (Bounding boxes + refinements) - 30 sec/img  
+- **Image-level Supervision** (Class labels + CAM) - 10 sec/img
+
+### Key Results (100% Training Data)
+
+| Method | Mean IoU | Retention | Cost | Ranking |
+|--------|----------|-----------|------|---------|
+| Full Supervision | **0.9446** | 100% | 300s/img | 🥇 Baseline |
+| Image-level CAM+CRF | **0.7181** | 76% | 10s/img | 🥈 **Best ROI** |
+| BBox Basic | 0.5515 | 58.4% | 30s/img | 🥉 |
+| BBox + GrabCut | 0.5428 | 57.5% | 30s/img | #4 |
+| BBox + GrabCut + CRF | 0.5420 | 57.4% | 30s/img | #5 |
+| Image-level CAM | 0.3398 | 36% | 10s/img | #6 |
+
+**Key Finding**: Image-level supervision with CAM+CRF achieves 76% of full supervision performance at only 3.3% of the annotation cost!
+
+## 📊 Visualizations
+
+### Performance Comparison
+
+All methods compared across different metrics (100% training data):
+
+![Performance Comparison](Visualizations/methods_comparison_combined.png)
+
+*Comprehensive performance comparison showing Foreground IoU, Background IoU, Overall Mean IoU, and Pixel Accuracy across all methods.*
+
+### Detailed Analysis
+
+#### 4-Panel Performance Breakdown
+![Detailed Comparison](Visualizations/methods_comparison_detailed.png)
+
+*Individual metric breakdowns: Foreground IoU, Background IoU, Overall Mean IoU, and Pixel Accuracy (Full + BBox methods).*
+
+#### Multi-dimensional Radar Chart
+![Radar Chart](Visualizations/methods_comparison_radar.png)
+
+*Multi-dimensional performance radar chart showing the relative strengths of each method across FG IoU, BG IoU, and Mean IoU.*
+
+### Method-Specific Visualizations
+
+#### BBox Pipeline
+![BBox Pipeline](Visualizations/bbox_pipeline_visualization.png)
+
+*BBox refinement pipeline showing: Original → BBox → Basic Mask → GrabCut → CRF refinement.*
+
+#### Full Supervision Pipeline
+![Full Supervision Pipeline](Visualizations/full_supervision_pipeline_visualization.png)
+
+*Full supervision training pipeline with pixel-level ground truth annotations.*
+
+### Sample Predictions
+
+#### Prediction Comparisons
+<p float="left">
+  <img src="Visualizations/prediction_grid_basic.png" width="32%" />
+  <img src="Visualizations/prediction_grid_grabcut.png" width="32%" />
+  <img src="Visualizations/prediction_grid_grabcut_crf.png" width="32%" />
+</p>
+
+*Sample predictions from BBox methods: (Left) Basic masks, (Middle) GrabCut refined, (Right) GrabCut+CRF refined.*
+
+## 🚀 Quick Start
+
+### Prerequisites
+- Python 3.8+
+- PyTorch 1.10+
+- CUDA-capable GPU (recommended)
+- 10GB+ free disk space
+
+### Installation
+
+1. **Clone the repository**
+```bash
+git clone https://github.com/KarenShark/EE4211-Course-Project.git
+cd EE4211-Course-Project
 ```
-conda create -n comp0197-cw1-pt python=3.12 pip
-conda activate comp0197-cw1-pt
-```
 
-### Step 2: Install PyTorch (CPU Version)
-```
-pip install torch==2.5.0 torchvision --index-url https://download.pytorch.org/whl/cpu
-```
-
-### Step 3: Install Additional Packages
-
-The extra packages needed for this project are:
-- `opencv-python` for image I/O and preprocessing
-- `matplotlib` for visualizing and saving predicted images
-- `pydensecrf` for CRF post-processing (constrain-to-boundary loss)
-
-```
-pip install opencv-python
-pip install matplotlib
+2. **Install dependencies**
+```bash
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
+pip install opencv-python matplotlib pillow pandas
 pip install git+https://github.com/lucasb-eyer/pydensecrf.git
 ```
 
-All scripts in this repository have been tested to run smoothly in this CPU-compatible environment. Make sure you remain within this newly created comp0197-cw1-pt environment whenever you run the experiments.
-
-## Part 2. Code Execution Instructions (Reproduce All Results)
-Below is the full guide to reproduce all results presented in our submission. Each part corresponds directly to the structure of the COMP0197 coursework components (MRP & OEQ).
-
-### Step 1: Weakly-Supervised Segmentation (MRP, main code)
-This script initiates the weakly-supervised segmentation process using class activation maps (CAMs). The --use_crf True flag specifies that CRF post-processing will be applied to refine the segmentation boundaries. 
-
-```
-python weakly-supervised/main.py --use_crf True
+3. **Run the main experiment notebook**
+```bash
+jupyter notebook annotation_granularity_comparison.ipynb
 ```
 
-### Step 2: Fully-Supervised Baseline (MRP, experiments)
-This set of commands runs experiments for fully-supervised segmentation baselines using different architectures. In our report, we already concluded that the DeepLabV3+ ResNet-50 architecture had the best results among the tested models; therefore, it serves as the baseline model for comparison. The other two commands are hence not necessary but beneficial for the marker to understand why we came to such conclusions.
+### 📥 Data Download
+
+**No manual data download needed!** The notebook automatically downloads the Oxford-IIIT Pet dataset using torchvision.
+
+When you run Cell 8 in the notebook:
+- ✅ Downloads images (7390 total)
+- ✅ Downloads trimap annotations (for full supervision)
+- ✅ Downloads bounding box XMLs (for bbox supervision)
+- ✅ Generates ground truth masks
+- ✅ Organizes into proper folder structure
+
+The data will be saved to `data/` folder (auto-created):
 ```
-python fully-supervised/main.py --model_name fcn    #Optional 
-python fully-supervised/main.py --model_name unet   #Optional 
-python fully-supervised/main.py --model_name deeplab
+data/
+├── images/                    # 7390 images
+├── annotations/
+│   ├── trimaps/              # Pixel-level masks (full supervision)
+│   └── xmls/                 # Bounding box annotations
+└── oxford-iiit-pet/          # Original torchvision download
 ```
 
-### Step 3: Ablation Studies (MRP, experiments)
-Two ablation studies have been conducted to investigate key components of our weakly-supervised segmentation framework:
-
-1. **CRF Post-Processing Ablation:** In this study, the segmentation script is executed without CRF post-processing. The goal is to assess the impact of CRF on segmentation performance by comparing the refined segmentation outputs (with CRF) against those produced without any post-processing. 
+## 📁 Project Structure
 
 ```
-python weakly-supervised/main.py --use_crf False
+EE4211-Course-Project/
+├── annotation_granularity_comparison.ipynb  # Main experiment notebook
+├── compare_methods_visualization.py         # Generate comparison charts
+│
+├── fully-supervised/          # Full supervision (pixel-level)
+│   ├── main.py               # Training script
+│   ├── models/               # DeepLabV3+ (ResNet50 backbone)
+│   └── ...
+│
+├── bbox-supervision/          # Bounding box supervision
+│   ├── main.py               # Training with GrabCut/CRF refinements
+│   ├── bounding_box.py       # BBox processing
+│   ├── crf.py                # Dense CRF refinement
+│   └── ...
+│
+├── image-level-supervision/   # Image-level (CAM-based)
+│   ├── main.py               # CAM training pipeline
+│   ├── vgg_train.py          # VGG16 classifier
+│   ├── grad_cam.py           # Grad-CAM generation
+│   └── ...
+│
+├── scripts/                   # Utility scripts
+├── utils/                     # Helper functions
+├── Visualizations/            # Generated comparison charts
+└── Trained Weights/           # Pre-trained model weights
 ```
 
-2. **Foreground Threshold Sensitivity**
-We analyzed the effect of varying the binary threshold used during evaluation on the segmentation performance. Different thresholds were selected, but the default one is 0.05. To observe the effects of other thresholds, users can manually adjust the value when running the code, like 0.01, 0.1.
-```
-#baseline model 
-python weakly-supervised/main.py --use_crf True --foreground_threshold 0.05
+## 🔬 Running Experiments
 
-#the number here is optional and can be varied
-python weakly-supervised/main.py --use_crf True --foreground_threshold 0.1 
+### Option 1: Run All Experiments (Main Notebook)
+
+Open `annotation_granularity_comparison.ipynb` and run all cells:
+- Automatically downloads dataset
+- Runs all 6 experiments
+- Generates comparison visualizations
+- Saves results to JSON files
+
+**Data Percentage Options**:
+- `DATA_PERCENTAGE = 0.1` - Quick test (~15 min total)
+- `DATA_PERCENTAGE = 1.0` - Full training (~2-3 hours total)
+
+### Option 2: Run Individual Methods
+
+**Full Supervision**:
+```bash
+python fully-supervised/main.py --model_name deeplab --data_percentage 1.0
 ```
 
-### Step 4: Open-Ended Question: Bounding Box VS CAM-Based Weakly Supervised Segmentation (OEQ, experiments)
-This script addresses an open-ended experimental question by comparing two annotation methods, where it evaluates segmentation performance using bounding box annotations versus CAM-based methods in Step 1.
+**BBox Supervision**:
+```bash
+# Basic mask
+python bbox-supervision/main.py --data_percentage 1.0 --use_grabcut False --use_crf False
+
+# With GrabCut refinement
+python bbox-supervision/main.py --data_percentage 1.0 --use_grabcut True --use_crf False
+
+# Full pipeline (GrabCut + CRF)
+python bbox-supervision/main.py --data_percentage 1.0 --use_grabcut True --use_crf True
 ```
-python open-ended-question/main.py
+
+**Image-level Supervision**:
+```bash
+# CAM without CRF
+python image-level-supervision/main.py --data_percentage 1.0 --use_crf False
+
+# CAM with CRF (best weakly-supervised method)
+python image-level-supervision/main.py --data_percentage 1.0 --use_crf True
 ```
+
+## 📈 Generate Your Own Visualizations
+
+After running experiments, you can generate comparison charts:
+
+```bash
+python compare_methods_visualization.py
+```
+
+This creates 4 comparison charts in `Visualizations/`:
+- `methods_comparison_detailed.png` - 4-panel detailed comparison
+- `methods_comparison_combined.png` - All metrics in one chart
+- `methods_comparison_radar.png` - Multi-dimensional radar chart
+- `methods_comparison_table.png` - Performance ranking table
+
+## 🎯 Key Findings
+
+### Performance Retention vs Cost
+
+| Supervision Level | Cost (sec/img) | Cost (%) | Mean IoU | Retention (%) |
+|-------------------|----------------|----------|----------|---------------|
+| Pixel-level | 300 | 100% | 0.9446 | 100% |
+| BBox | 30 | 10% | 0.55 | 58% |
+| Image-level | 10 | 3.3% | **0.72** | **76%** ⭐ |
+
+### Unexpected Discoveries
+
+1. **CAM+CRF outperforms BBox methods**: Despite using weaker supervision (only class labels), image-level CAM with CRF refinement achieves significantly better performance than bounding box methods.
+
+2. **GrabCut/CRF don't help BBox**: Traditional refinement techniques (GrabCut, CRF) provide minimal or negative improvement for BBox-based pseudo-labels on this dataset.
+
+3. **CRF is critical for CAM**: CRF refinement provides +111% improvement for CAM-based methods (0.34 → 0.72 IoU), effectively filling incomplete activations.
+
+### Recommendations
+
+- **Critical applications** (medical, autonomous driving): Use full supervision
+- **Standard applications** with limited budget: Use **image-level CAM+CRF** (best ROI)
+- **When pixel-accurate boundaries needed**: Consider full supervision despite higher cost
+
+## 📈 Results Files
+
+After running experiments, results are saved to:
+- `fully-supervised/output/results_deeplab.json`
+- `bbox-supervision/results_bbox_*.json`
+- `image-level-supervision/results_*.json`
+
+Each JSON contains:
+- Mean IoU (overall)
+- Foreground IoU
+- Background IoU
+- Pixel Accuracy (where applicable)
+
+## 🔧 Troubleshooting
+
+### Data Download Issues
+If automatic download fails:
+1. Check internet connection
+2. Manually download from: https://www.robots.ox.ac.uk/~vgg/data/pets/
+3. Extract to `data/` folder
+
+### CUDA Out of Memory
+- Reduce batch size in respective `main.py` files
+- Use `DATA_PERCENTAGE = 0.1` for testing
+
+### Missing Dependencies
+```bash
+pip install -r requirements.txt  # If requirements.txt exists
+```
+
+## 📝 Citation
+
+Dataset: Oxford-IIIT Pet Dataset
+```
+@InProceedings{parkhi12a,
+  author       = "Parkhi, O. M. and Vedaldi, A. and Zisserman, A. and Jawahar, C.~V.",
+  title        = "Cats and Dogs",
+  booktitle    = "IEEE Conference on Computer Vision and Pattern Recognition",
+  year         = "2012",
+}
+```
+
+## 📧 Contact
+
+For questions or issues, please open an issue on GitHub.
+
+## 📄 License
+
+This project is for academic use only.
 

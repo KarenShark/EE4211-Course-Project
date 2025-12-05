@@ -54,6 +54,14 @@ def train(model, train_loader, val_loader, criterion, optimizer, device, epochs=
 
         val_acc = val_correct / len(val_loader.dataset)
         print(f"Epoch {epoch + 1}, Val Loss: {val_loss:.3f}, Val Accuracy: {val_acc:.3f}")
+    
+    # Return final metrics for checkpoint saving
+    return {
+        'train_acc': train_acc,
+        'val_acc': val_acc,
+        'train_loss': running_loss,
+        'val_loss': val_loss
+    }
 
 
 

@@ -6,6 +6,7 @@ from .data_split import (
     split_indices
 )
 from .results_manager import ResultsManager, collect_results_from_experiments
+from .checkpoint_manager import CheckpointManager
 
 __all__ = [
     'set_random_seed',
@@ -13,6 +14,7 @@ __all__ = [
     'split_oxford_pet_dataset',
     'split_indices',
     'ResultsManager',
-    'collect_results_from_experiments'
+    'collect_results_from_experiments',
+    'CheckpointManager'
 ]
 

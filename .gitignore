@@ -1,0 +1,28 @@
+.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Data
+data/
+*.pt
+*.pth
+*.npy
+*.npz
+
+# Output and results
+output/
+results/
+*.log
+
+# Jupyter
+.ipynb_checkpoints/
+
+# IDE
+.vscode/
+.idea/
+*.zip

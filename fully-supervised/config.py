@@ -17,8 +17,8 @@ elif DEVICE == 'mps':
 else:
     KWARGS = {}  # CPU: use default settings
 
-# Seed
-SEED = 100
+# Seed (unified across all modules for fair comparison)
+SEED = 42
 
 # Data paths
 IMAGE_PATH = 'data/images'
@@ -46,10 +46,12 @@ OUTPUT_STRIDE = 8
 # Output paths
 OUTPUT_PATH = 'fully-supervised/output'
 SPLIT_PATH = 'fully-supervised/split'
+TRAIN_IMGS_PATH = os.path.join(SPLIT_PATH, 'train_imgs.pickle')
+VAL_IMGS_PATH = os.path.join(SPLIT_PATH, 'val_imgs.pickle')
 TEST_IMGS_PATH = os.path.join(SPLIT_PATH, 'test_imgs.pickle')
 TEST_MASKS_PATH = os.path.join(SPLIT_PATH, 'test_masks.pickle')
-MODEL_PATH = os.path.join(OUTPUT_PATH, 'unet_model.pth')
-HISTORY_PATH = os.path.join(OUTPUT_PATH, 'unet_history.pickle')
+MODEL_PATH = os.path.join(OUTPUT_PATH, 'deeplab_model.pth')
+HISTORY_PATH = os.path.join(OUTPUT_PATH, 'deeplab_history.pickle')
 HISTORY_PLOT_PATH = os.path.join(OUTPUT_PATH, 'history.png')
 PRED_PLOT_PATH = os.path.join(OUTPUT_PATH, 'pred.png')
 GROUND_TRUTH_DIR = 'ground-truth'

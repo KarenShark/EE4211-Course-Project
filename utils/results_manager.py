@@ -34,9 +34,9 @@ class ResultsManager:
     def _create_directory_structure(self):
         """Create the standardized directory structure for results."""
         subdirs = [
-            "weakly-supervised",
+            "image-level-supervision",
             "fully-supervised", 
-            "open-ended-question",
+            "bbox-supervision",
             "comparisons",
             "visualizations",
             "logs"
@@ -53,7 +53,7 @@ class ResultsManager:
         Add experiment results to the manager.
         
         Args:
-            experiment_name (str): Name of the experiment (e.g., "weakly-supervised-crf")
+            experiment_name (str): Name of the experiment (e.g., "image-level-supervision-crf")
             metrics (dict): Dictionary of metrics (e.g., {"IoU": 0.75, "Pixel Acc": 0.85})
             metadata (dict, optional): Additional metadata (e.g., {"epochs": 10, "batch_size": 32})
         """
@@ -262,7 +262,7 @@ def collect_results_from_experiments():
     
     print("Note: To populate results, call manager.add_result() with your experiment metrics")
     print("Example usage:")
-    print('  manager.add_result("weakly-supervised-crf", ')
+    print('  manager.add_result("image-level-supervision-crf", ')
     print('                     {"Mean IoU": 0.65, "Pixel Accuracy": 0.82},')
     print('                     {"epochs": 10, "use_crf": True})')
     

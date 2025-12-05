@@ -2,45 +2,31 @@ import os
 import numpy as np
 import torch
 import pickle
+import json
 from PIL import Image
 from torchvision import transforms
 import torch.serialization
+import matplotlib.pyplot as plt
 
-from models.fcn import FCN8s
-from models.unet import UNet
 from models import deeplabv3plus
 
 def load_trained_model(model_name, model_path, device='cpu'):
     """
-    Load a trained segmentation model from file and prepare it for evaluation.
+    Load a trained DeepLabV3+ segmentation model.
     Args:
-        model_name (str): Name of the model architecture (only acceptable: "fcn", "unet", "deeplab").
+        model_name (str): Model architecture (only 'deeplab' is supported).
         model_path (str): Path to the saved model file.
         device (str): Device to load the model onto ("cpu", "cuda", etc.).
     Returns:
         torch.nn.Module: The loaded and ready-to-evaluate model.
     """
+    if not model_name.lower().startswith('deeplab'):
+        raise ValueError(f"Only 'deeplab' model is supported. Got: {model_name}")
 
-    if model_name.lower() == 'fcn':
-        with torch.serialization.safe_globals({"models.fcn.FCN8s": FCN8s}):
-            model = torch.load(model_path, map_location=device, weights_only=False)
-        model.eval()
-        return model.to(device)
-
-    elif model_name.lower() == 'unet':
-        with torch.serialization.safe_globals({"models.unet.UNet": UNet}):
-            model = torch.load(model_path, map_location=device, weights_only=False)
-        model.eval()
-        return model.to(device)
-
-    elif model_name.lower() == 'deeplab':
-        with torch.serialization.safe_globals({"models.deeplabv3plus.DeeplabV3PlusResNet50": deeplabv3plus.deeplabv3_resnet50}):
-            model = torch.load(model_path, map_location=device, weights_only=False)
-        model.eval()
-        return model.to(device)
-
-    else:
-        raise ValueError(f"Unknown model_name: {model_name}")
+    with torch.serialization.safe_globals({"models.deeplabv3plus.DeeplabV3PlusResNet50": deeplabv3plus.deeplabv3_resnet50}):
+        model = torch.load(model_path, map_location=device, weights_only=False)
+    model.eval()
+    return model.to(device)
 
 def compute_iou(valid_mask, pred_binary, gt_binary, class_id):
     """
@@ -151,7 +137,7 @@ def evaluate_dataset_in_memory(model_name, model_path, test_imgs_pkl, trimap_dir
     """
     Evaluate a trained segmentation model on a dataset stored in memory.
     Args:
-        model_name (str): Model architecture (only acceptable: "fcn", "unet", "deeplab").
+        model_name (str): Model architecture (only 'deeplab' is supported).
         model_path (str): Path to the trained model.
         test_imgs_pkl (str): Pickle file containing test image paths.
         trimap_dir (str): Directory containing trimap ground truth masks.
@@ -192,10 +178,27 @@ def evaluate_dataset_in_memory(model_name, model_path, test_imgs_pkl, trimap_dir
     print(f" Mean FG IoU:   {mean_fg_iou:.4f}")
     print(f" Overall mIoU:  {overall_miou:.4f}")
     print(f" Mean PixAcc:   {mean_pixacc:.4f}")
+    
+    # Save results to JSON
+    result_data = {
+        'method': f'Fully-Supervised ({model_name})',
+        'mean_bg_iou': float(mean_bg_iou),
+        'mean_fg_iou': float(mean_fg_iou),
+        'mean_iou': float(overall_miou),
+        'mean_pixel_accuracy': float(mean_pixacc),
+        'num_test_samples': len(test_images)
+    }
+    
+    result_path = os.path.join("fully-supervised/output", f"results_{model_name}.json")
+    os.makedirs(os.path.dirname(result_path), exist_ok=True)
+    with open(result_path, 'w') as f:
+        json.dump(result_data, f, indent=2)
+    print(f"\n✓ Results saved to: {result_path}")
 
     return {
         "bg_ious": iou_bgs,
         "fg_ious": iou_fgs,
         "miou_list": mean_ious,
-        "pixel_acc_list": pixel_accs
+        "pixel_acc_list": pixel_accs,
+        "result_data": result_data
     }

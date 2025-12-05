@@ -12,10 +12,10 @@ class Config:
     DATA_PATH = './data'
     
     # Output results directory (for saving CAM images, masks, etc.)
-    OUTPUT_DIR = 'weakly-supervised/vgg_cam_masks'
-    MODEL_PATH = 'weakly-supervised/vgg.pth'
-    DEEPLAB_MODEL_PATH = 'weakly-supervised/deeplabV3.pth'
-    SAVE_PATH = 'weakly-supervised/pred.png'
+    OUTPUT_DIR = 'image-level-supervision/vgg_cam_masks'
+    MODEL_PATH = 'image-level-supervision/vgg.pth'
+    DEEPLAB_MODEL_PATH = 'image-level-supervision/deeplabV3.pth'
+    SAVE_PATH = 'image-level-supervision/pred.png'
     
     # Training parameters
     VGG_TRAIN_BATCH_SIZE = 32

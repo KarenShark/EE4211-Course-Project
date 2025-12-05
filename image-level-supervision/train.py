@@ -3,10 +3,12 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
 from torchvision import models
-from utils import ImageCamMaskDataset
+from ws_utils import ImageCamMaskDataset
+import sys
+import os
 
 def train_deeplab(SAVE_MODEL_PATH, CAM_MASK_DIR, USE_CRF, num_epochs, device, 
-                  val_percentage=0.15, patience=3, min_delta=0.001):
+                  val_percentage=0.15, patience=3, min_delta=0.001, binarize_masks=True, mask_threshold=0.05):
     """
     Train a DeepLabV3 model for binary segmentation using weak labels from CAM masks:
         - Loads a pretrained DeepLabV3 model with a modified classifier for binary output.
@@ -22,6 +24,8 @@ def train_deeplab(SAVE_MODEL_PATH, CAM_MASK_DIR, USE_CRF, num_epochs, device,
         val_percentage (float): Percentage of data to use for validation (default: 0.15).
         patience (int): Number of epochs to wait for improvement before early stopping (default: 3).
         min_delta (float): Minimum change in validation loss to be considered as improvement (default: 0.001).
+        binarize_masks (bool): Whether to binarize the pseudo-masks (default: True).
+        mask_threshold (float): Threshold for mask binarization (default: 0.05).
     """
 
     # Load the pretrained DeepLabV3 model
@@ -38,7 +42,14 @@ def train_deeplab(SAVE_MODEL_PATH, CAM_MASK_DIR, USE_CRF, num_epochs, device,
     criterion = nn.BCEWithLogitsLoss()
 
     # Prepare dataset and split into train/val
-    full_dataset = ImageCamMaskDataset(data_dir=CAM_MASK_DIR, percentage=1.0, use_crf=USE_CRF)
+    # Pass binarization params to dataset
+    full_dataset = ImageCamMaskDataset(
+        data_dir=CAM_MASK_DIR, 
+        percentage=1.0, 
+        use_crf=USE_CRF,
+        binarize=binarize_masks,
+        threshold=mask_threshold
+    )
     dataset_size = len(full_dataset)
     val_size = int(dataset_size * val_percentage)
     train_size = dataset_size - val_size
@@ -58,7 +69,8 @@ def train_deeplab(SAVE_MODEL_PATH, CAM_MASK_DIR, USE_CRF, num_epochs, device,
     print(f"  Val samples:   {val_size}")
     print(f"  CRF enabled:   {USE_CRF}")
     print(f"  Max epochs:    {num_epochs}")
-    print(f"  Early stop patience: {patience}\n")
+    print(f"  Early stop patience: {patience}")
+    print(f"  Binarize masks: {binarize_masks} (threshold={mask_threshold})\n")
 
     # Early stopping variables
     best_val_loss = float('inf')
@@ -126,8 +138,50 @@ def train_deeplab(SAVE_MODEL_PATH, CAM_MASK_DIR, USE_CRF, num_epochs, device,
         deeplab_model.load_state_dict(best_model_state)
         print(f"\nRestoring best model (val_loss={best_val_loss:.4f})")
     
+    # Traditional save (for backward compatibility)
     torch.save(deeplab_model.state_dict(), SAVE_MODEL_PATH)
-    print(f"Model saved to {SAVE_MODEL_PATH}\n")
+    print(f"Model saved to {SAVE_MODEL_PATH}")
+    
+    # Advanced checkpoint save with metadata
+    try:
+        # Import checkpoint manager
+        sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        from utils import CheckpointManager
+        
+        # Determine model name based on config
+        model_name = "deeplabv3_crf" if USE_CRF else "deeplabv3_nocrf"
+        
+        # Create checkpoint manager
+        ckpt_manager = CheckpointManager(save_dir="checkpoints")
+        
+        # Prepare config
+        config = {
+            'epochs': epoch + 1,  # Actual epochs trained
+            'batch_size': 16,
+            'learning_rate': 1e-4,
+            'optimizer': 'Adam',
+            'use_crf': USE_CRF,
+            'dataset': 'Oxford-IIIT Pet',
+            'early_stopping_patience': patience
+        }
+        
+        # Prepare metrics (will be updated after evaluation)
+        metrics = {
+            'best_val_loss': best_val_loss,
+            'final_train_loss': avg_train_loss
+        }
+        
+        # Save checkpoint with metadata
+        checkpoint_path = ckpt_manager.save_checkpoint(
+            model=deeplab_model,
+            config=config,
+            metrics=metrics,
+            model_name=model_name
+        )
+        
+    except Exception as e:
+        print(f"Warning: Advanced checkpoint save failed: {e}")
+        print("Model was still saved using traditional method.")
 
 
 

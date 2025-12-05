@@ -1,8 +1,10 @@
 import numpy as np
 import torch
 from torchvision import models
+import json
+import os
 
-from utils import get_data, visualize_prediction
+from ws_utils import get_data, visualize_prediction
 
 def compute_iou_from_masks(pred_mask, gt_mask, class_id, ignore_label=3):
     """
@@ -74,7 +76,7 @@ def evaluate_model_on_loader(model, dataloader, device, foreground_threshold):
     }
 
 
-def evaluate_deeplab_model(MODEL_PATH, device, SAVE_PATH, threshold):
+def evaluate_deeplab_model(MODEL_PATH, device, SAVE_PATH, threshold, data_percentage=1.0):
     """
     Load a trained DeepLab model, evaluate it on a test dataset, and save a sample prediction.
     Args:
@@ -82,11 +84,12 @@ def evaluate_deeplab_model(MODEL_PATH, device, SAVE_PATH, threshold):
         device (str or torch.device): Device to load and evaluate the model.
         SAVE_PATH (str): Path to save a sample predicted mask visualization.
         threshold (float): Foreground probability threshold for mask binarization.
+        data_percentage (float): Percentage of data to use for evaluation (default: 1.0).
     """
 
     FOREGROUND_THRESHOLD = threshold
 
-    _, _, test_loader = get_data(batch_size=8, target_types='segmentation', test_percentage=1.0)
+    _, _, test_loader = get_data(batch_size=8, target_types='segmentation', data_percentage=data_percentage)
 
     deeplab_model = models.segmentation.deeplabv3_resnet50(pretrained=True)
     num_classes = 2 
@@ -95,8 +98,30 @@ def evaluate_deeplab_model(MODEL_PATH, device, SAVE_PATH, threshold):
     deeplab_model = deeplab_model.to(device)
     deeplab_model.eval()
 
-    evaluate_model_on_loader(model=deeplab_model, dataloader=test_loader,
-                             device=device, foreground_threshold=FOREGROUND_THRESHOLD)
+    results = evaluate_model_on_loader(model=deeplab_model, dataloader=test_loader,
+                                       device=device, foreground_threshold=FOREGROUND_THRESHOLD)
+
+    # Save results to JSON
+    # Check if CRF is enabled (avoid matching "no_crf")
+    use_crf = (("_crf.pth" in MODEL_PATH.lower() or "deeplabv3_crf" in MODEL_PATH.lower()) 
+               and "no_crf" not in MODEL_PATH.lower())
+    result_filename = "results_crf.json" if use_crf else "results_no_crf.json"
+    result_path = os.path.join("image-level-supervision", result_filename)
+    
+    result_data = {
+        'method': 'Weakly-Supervised (with CRF)' if use_crf else 'Weakly-Supervised (without CRF)',
+        'mean_fg_iou': float(np.nanmean(results['fg_iou'])),
+        'mean_bg_iou': float(np.nanmean(results['bg_iou'])),
+        'mean_iou': float(np.nanmean(results['mean_iou'])),
+        'data_percentage': data_percentage,
+        'threshold': FOREGROUND_THRESHOLD,
+        'num_test_samples': len(test_loader.dataset)
+    }
+    
+    os.makedirs(os.path.dirname(result_path), exist_ok=True)
+    with open(result_path, 'w') as f:
+        json.dump(result_data, f, indent=2)
+    print(f"\n✓ Results saved to: {result_path}")
 
     #visualise
     image_tensor = test_loader.dataset[0][0]
@@ -104,3 +129,5 @@ def evaluate_deeplab_model(MODEL_PATH, device, SAVE_PATH, threshold):
                                      foreground_threshold=FOREGROUND_THRESHOLD,
                                      target_mask=test_loader.dataset[0][1],
                                      save_img_path=SAVE_PATH)
+    
+    return result_data

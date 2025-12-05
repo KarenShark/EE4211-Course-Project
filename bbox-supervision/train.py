@@ -10,7 +10,7 @@ from crf import apply_crf
 
 class ImageBBoxMaskDataset(Dataset):
     """
-    PyTorch Dataset that loads images and weakly-supervised masks. 
+    PyTorch Dataset that loads images and bounding-box-derived masks. 
     Args:
         data_dir (str): Root directory containing 'images' and 'masks' subdirectories.
         image_subdir (str): Subfolder name for image tensors (.pt).
@@ -95,14 +95,14 @@ def run_training(config, val_percentage=0.15, patience=3, min_delta=0.001):
     optimizer = optim.Adam(deeplab_model.parameters(), lr=config["LEARNING_RATE"])
     criterion = nn.BCEWithLogitsLoss()
 
-    # Load full dataset
+    # Load full dataset (mask_subdir and use_crf controlled by CONFIG)
     full_dataset = ImageBBoxMaskDataset(
         data_dir=config["TRAIN_DATA_DIR"],
         image_subdir="images",
-        mask_subdir="refined_masks" if config["USE_CRF"] else "basic_masks",
+        mask_subdir=config["MASK_SUBDIR"],  # Determined by USE_GRABCUT
         image_jpg_dir=config["IMAGE_PATH"],  # path to original jpgs
         percentage=config["PERCENTAGE"],
-        use_crf=config["USE_CRF"]
+        use_crf=config["USE_CRF"]  # Determined by USE_CRF
     )
 
     # Split into train and validation
@@ -120,10 +120,12 @@ def run_training(config, val_percentage=0.15, patience=3, min_delta=0.001):
     val_loader = DataLoader(val_dataset, batch_size=config["BATCH_SIZE"], shuffle=False)
     
     print(f"\nBounding Box segmentation training:")
-    print(f"  Train samples: {train_size}")
-    print(f"  Val samples:   {val_size}")
-    print(f"  CRF enabled:   {config['USE_CRF']}")
-    print(f"  Max epochs:    {config['NUM_EPOCHS']}")
+    print(f"  Train samples:  {train_size}")
+    print(f"  Val samples:    {val_size}")
+    print(f"  Mask type:      {config['MASK_SUBDIR']}")
+    print(f"  GrabCut:        {config.get('USE_GRABCUT', True)}")
+    print(f"  CRF enabled:    {config['USE_CRF']}")
+    print(f"  Max epochs:     {config['NUM_EPOCHS']}")
     print(f"  Early stop patience: {patience}\n")
 
     # Early stopping variables

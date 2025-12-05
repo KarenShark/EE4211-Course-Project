@@ -2,6 +2,7 @@ import os
 import cv2
 import torch
 import pickle
+import json
 import numpy as np
 import matplotlib.pyplot as plt
 from PIL import Image
@@ -95,8 +96,8 @@ class EvaluationDataset(Dataset):
         gt_mask = cv2.imread(gt_mask_path, cv2.IMREAD_GRAYSCALE)
         if gt_mask is None:
             gt_mask = np.zeros((self.image_size[1], self.image_size[0]), dtype=np.uint8)
-        else:
-            gt_mask = Image.fromarray(gt_mask)
+        # Always convert to PIL Image for transform
+        gt_mask = Image.fromarray(gt_mask)
         gt_mask = self.mask_transform(gt_mask)
         gt_mask = (gt_mask * 255).squeeze().to(torch.int64)
         gt_mask = torch.where(gt_mask > 127, 
@@ -164,18 +165,34 @@ def evaluate_model_on_loader(model, dataloader, device):
         'pixel_accuracy': pixel_accs
     }
 
-def visualize_prediction_sample(model, dataloader, device, gt_trimaps_dir, idx=1, save_dir="open-ended-question/images"):
+def visualize_prediction_sample(model, dataloader, device, gt_trimaps_dir, idx=1, save_dir=None, config=None):
     """
-    Visualize and save one prediction from the evaluation dataset using the trimap ground truth.
+    Visualize and save prediction samples from the evaluation dataset using the trimap ground truth.
     Args:
         model (torch.nn.Module): Trained segmentation model.
         dataloader (DataLoader): Evaluation DataLoader.
         device (torch.device): Device to run inference on.
         gt_trimaps_dir (str): Directory containing the original trimap ground truth PNGs.
         idx (int): Index of the image to visualize from the batch.
-        save_dir (str): Directory to save the visualization image.
+        save_dir (str): Directory to save the visualization image. Defaults to current script directory.
+        config (dict): Configuration dictionary with USE_GRABCUT and USE_CRF flags.
     """
+    if save_dir is None:
+        save_dir = os.path.dirname(os.path.abspath(__file__))
     os.makedirs(save_dir, exist_ok=True)
+    
+    # Generate dynamic filename suffix based on experiment configuration
+    if config:
+        use_grabcut = config.get("USE_GRABCUT", True)
+        use_crf = config.get("USE_CRF", True)
+        if not use_grabcut:
+            suffix = "_basic"
+        elif not use_crf:
+            suffix = "_grabcut"
+        else:
+            suffix = "_grabcut_crf"
+    else:
+        suffix = ""
     model.eval()
     with torch.no_grad():
         # Retrieve one batch from the DataLoader.
@@ -210,25 +227,140 @@ def visualize_prediction_sample(model, dataloader, device, gt_trimaps_dir, idx=1
             # Create subplots.
             fig, axs = plt.subplots(1, 4, figsize=(20, 5))
             axs[0].imshow(image_np)
-            axs[0].set_title("Original Image")
+            axs[0].set_title("Original Image", fontsize=14, fontweight='bold')
             axs[0].axis("off")
 
             axs[1].imshow(pred_mask, cmap='gray')
-            axs[1].set_title("Predicted Mask")
+            axs[1].set_title("Predicted Mask (BBox)", fontsize=14, fontweight='bold')
             axs[1].axis("off")
 
             axs[2].imshow(gt_trimap)
-            axs[2].set_title("Ground Truth")
+            axs[2].set_title("Ground Truth", fontsize=14, fontweight='bold')
             axs[2].axis("off")
 
             axs[3].imshow(overlay)
-            axs[3].set_title("Predict Mask Overlay Image")
+            axs[3].set_title("Prediction Overlay", fontsize=14, fontweight='bold')
             axs[3].axis("off")
 
+            plt.suptitle('Bounding Box Supervision - Prediction Results', 
+                        fontsize=16, fontweight='bold', y=1.02)
             plt.tight_layout()
-            plt.savefig(os.path.join(save_dir, f"sample_{idx}.png"), bbox_inches='tight')
-            plt.show()
+            
+            # Save with experiment-specific name
+            main_save_path = os.path.join(save_dir, f"prediction_results{suffix}.png")
+            plt.savefig(main_save_path, bbox_inches='tight', dpi=150)
+            print(f"✓ Visualization saved to: {main_save_path}")
+            
+            # Also save with sample index for reference
+            sample_save_path = os.path.join(save_dir, f"sample_{idx}{suffix}.png")
+            plt.savefig(sample_save_path, bbox_inches='tight', dpi=150)
+            
+            plt.close()
             break
+
+
+def visualize_multiple_predictions(model, dataloader, device, gt_trimaps_dir, num_samples=3, save_path=None, config=None):
+    """
+    Visualize multiple prediction samples in a grid layout.
+    Args:
+        model (torch.nn.Module): Trained segmentation model.
+        dataloader (DataLoader): Evaluation DataLoader.
+        device (torch.device): Device to run inference on.
+        gt_trimaps_dir (str): Directory containing the original trimap ground truth PNGs.
+        num_samples (int): Number of samples to visualize.
+        save_path (str): Path to save the grid visualization. Defaults to current script directory.
+        config (dict): Configuration dictionary with USE_GRABCUT and USE_CRF flags.
+    """
+    if save_path is None:
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        # Generate dynamic filename based on experiment configuration
+        if config:
+            use_grabcut = config.get("USE_GRABCUT", True)
+            use_crf = config.get("USE_CRF", True)
+            if not use_grabcut:
+                suffix = "_basic"
+            elif not use_crf:
+                suffix = "_grabcut"
+            else:
+                suffix = "_grabcut_crf"
+        else:
+            suffix = ""
+        save_path = os.path.join(script_dir, f"prediction_grid{suffix}.png")
+    
+    model.eval()
+    
+    # Collect samples
+    samples = []
+    dataset_obj = dataloader.dataset
+    
+    with torch.no_grad():
+        for batch_images, _ in dataloader:
+            for idx in range(min(num_samples, len(batch_images))):
+                if len(samples) >= num_samples:
+                    break
+                
+                # Get image info
+                image_path = dataset_obj.image_paths[idx]
+                base_name = os.path.splitext(os.path.basename(image_path))[0]
+                
+                # Load GT
+                gt_trimap_path = os.path.join(gt_trimaps_dir, base_name + ".png")
+                if not os.path.exists(gt_trimap_path):
+                    continue
+                gt_trimap = np.array(Image.open(gt_trimap_path))
+                
+                # Get prediction
+                image = batch_images[idx].unsqueeze(0).to(device)
+                output = model(image)['out']
+                output = torch.sigmoid(output)
+                pred_mask = (output >= 0.5).float().squeeze().cpu().numpy()
+                
+                # Process input image
+                image_np = batch_images[idx].permute(1, 2, 0).cpu().numpy()
+                image_np = np.clip((image_np * [0.229, 0.224, 0.225]) + [0.485, 0.456, 0.406], 0, 1)
+                
+                samples.append({
+                    'image': image_np,
+                    'pred': pred_mask,
+                    'gt': gt_trimap,
+                    'name': base_name
+                })
+            
+            if len(samples) >= num_samples:
+                break
+    
+    if not samples:
+        print("⚠️  No samples collected for visualization")
+        return
+    
+    # Create grid visualization
+    fig, axes = plt.subplots(num_samples, 3, figsize=(15, 5 * num_samples))
+    if num_samples == 1:
+        axes = axes.reshape(1, -1)
+    
+    for i, sample in enumerate(samples):
+        # Original image
+        axes[i, 0].imshow(sample['image'])
+        axes[i, 0].set_title(f"Sample {i+1}: Original", fontsize=12, fontweight='bold')
+        axes[i, 0].axis('off')
+        
+        # Prediction
+        axes[i, 1].imshow(sample['pred'], cmap='gray')
+        axes[i, 1].set_title(f"Prediction (BBox)", fontsize=12, fontweight='bold')
+        axes[i, 1].axis('off')
+        
+        # Ground Truth
+        axes[i, 2].imshow(sample['gt'], cmap='gray')
+        axes[i, 2].set_title(f"Ground Truth", fontsize=12, fontweight='bold')
+        axes[i, 2].axis('off')
+    
+    plt.suptitle('Bounding Box Supervision - Multiple Predictions', 
+                fontsize=16, fontweight='bold', y=0.995)
+    plt.tight_layout()
+    plt.savefig(save_path, bbox_inches='tight', dpi=150)
+    print(f"✓ Multi-sample visualization saved to: {save_path}")
+    plt.close()
+
 
 def evaluate_segmentation(config):
     """
@@ -266,5 +398,34 @@ def evaluate_segmentation(config):
         device=device
     )
 
-    visualize_prediction_sample(model, test_loader, device, gt_trimaps_dir=config["GROUND_TRUTH_DIR"])
+    # Save results to JSON
+    result_data = {
+        'method': 'Open-Ended: Bounding Box',
+        'mean_fg_iou': float(np.nanmean(results['fg_iou'])),
+        'mean_bg_iou': float(np.nanmean(results['bg_iou'])),
+        'mean_iou': float(np.nanmean(results['mean_iou'])),
+        'mean_pixel_accuracy': float(np.nanmean(results['pixel_accuracy'])),
+        'num_test_samples': len(test_loader.dataset)
+    }
+    
+    # Save results in the OEQ directory
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    result_path = config.get("RESULTS_JSON", os.path.join(script_dir, "results_bbox.json"))
+    with open(result_path, 'w') as f:
+        json.dump(result_data, f, indent=2)
+    print(f"\n✓ Results saved to: {result_path}")
+
+    # Generate visualization
+    print("\nGenerating prediction visualization...")
+    visualize_prediction_sample(model, test_loader, device, 
+                               gt_trimaps_dir=config["GROUND_TRUTH_DIR"],
+                               config=config)
+    
+    # Generate multi-sample visualization grid
+    visualize_multiple_predictions(model, test_loader, device, 
+                                   gt_trimaps_dir=config["GROUND_TRUTH_DIR"],
+                                   num_samples=3,
+                                   config=config)
+    
+    results['result_data'] = result_data
     return results

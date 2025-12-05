@@ -118,9 +118,9 @@ def get_data(batch_size, data_percentage=1.0, train_percentage=None, test_percen
         test_dataset_new = Subset(all_dataset, test_indices)
         
         print(f"\nNew train/val/test split (seed={seed}):")
-        print(f"  Train: {len(train_dataset)} ({len(train_dataset)/total_size*100:.1f}%)")
-        print(f"  Val:   {len(val_dataset)} ({len(val_dataset)/total_size*100:.1f}%)")
-        print(f"  Test:  {len(test_dataset_new)} ({len(test_dataset_new)/total_size*100:.1f}%)")
+        print(f"  Train: {len(train_dataset)} ({len(train_dataset)/total_size*100:.2f}%)")
+        print(f"  Val:   {len(val_dataset)} ({len(val_dataset)/total_size*100:.2f}%)")
+        print(f"  Test:  {len(test_dataset_new)} ({len(test_dataset_new)/total_size*100:.2f}%)")
         
         # Create dataloaders
         train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
@@ -283,11 +283,13 @@ class ImageCamMaskDataset(Dataset):
         data_dir (str): Directory containing 'images/' and 'masks/' subfolders.
         percentage (float): Percentage of dataset to use.
         use_crf (bool): Whether to refine masks using CRF.
+        binarize (bool): Whether to binarize the mask.
+        threshold (float): Threshold for binarization (default 0.05).
     Methods:
         __len__: Return the number of samples.
         __getitem__: Return a single image and its CAM or CRF-refined mask.
     """
-    def __init__(self, data_dir, percentage=1.0, use_crf=True):
+    def __init__(self, data_dir, percentage=1.0, use_crf=True, binarize=True, threshold=0.05):
         self.data_dir = data_dir
         self.image_dir = os.path.join(data_dir, 'images')
         self.mask_dir = os.path.join(data_dir, 'masks')
@@ -300,6 +302,8 @@ class ImageCamMaskDataset(Dataset):
         self.image_files = self.image_files[:self.dataset_size]
         self.mask_files = self.mask_files[:self.dataset_size]
         self.use_crf = use_crf
+        self.binarize = binarize
+        self.threshold = threshold
 
     def __len__(self):
         return self.dataset_size
@@ -309,12 +313,25 @@ class ImageCamMaskDataset(Dataset):
         image = torch.load(img_path)
         mask = np.load(os.path.join(self.mask_dir, self.mask_files[idx]))
         cam_resized = cv2.resize(mask, (224, 224), interpolation=cv2.INTER_LINEAR)
+        
+        final_mask = None
         if self.use_crf:
             denorm_image = denormalize_image(image)
             crf_cam = apply_crf(cam=cam_resized, image=denorm_image)
-            crf_cam_norm = (crf_cam - crf_cam.min()) / (crf_cam.max() - crf_cam.min())
-            return image, crf_cam_norm
-        return image, torch.from_numpy(cam_resized).float()
+            # CRF returns probability in [0,1], use directly
+            final_mask = crf_cam
+        else:
+            # Normalize raw CAM to [0,1] for consistent thresholding
+            cam_norm = (cam_resized - cam_resized.min()) / (cam_resized.max() - cam_resized.min() + 1e-8)
+            final_mask = cam_norm
+            
+        # Apply binarization if requested
+        if self.binarize:
+            final_mask = (final_mask >= self.threshold).astype(np.float32)
+        else:
+            final_mask = final_mask.astype(np.float32)
+
+        return image, torch.from_numpy(final_mask).float()
 
 
 def apply_crf(cam, image, n_classes=2):
