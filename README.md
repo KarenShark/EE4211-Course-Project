@@ -128,6 +128,42 @@ data/
 └── oxford-iiit-pet/          # Original torchvision download
 ```
 
+### 📦 Pre-trained Weights
+
+**Skip Training & Use Pre-trained Models!**
+
+We provide pre-trained weights for all 6 methods trained on 100% of the dataset:
+
+**🔗 Download All Weights** (Google Drive):  
+📥 [**Download Pre-trained Weights (ZIP)**](https://drive.google.com/file/d/1a_6nnTpNVzewXwbBY85c3PYxujJTaBgb/view?usp=sharing)
+
+**Included Models**:
+- ✅ `deeplab_model.pth` - Full Supervision (0.9446 IoU)
+- ✅ `box_trained_basic.pth` - BBox Basic (0.5515 IoU)
+- ✅ `box_trained_grabcut.pth` - BBox + GrabCut (0.5428 IoU)
+- ✅ `box_trained_grabcut_crf.pth` - BBox + GrabCut + CRF (0.5420 IoU)
+- ✅ `deeplabv3_gradcam_no_crf.pth` - CAM without CRF (0.3398 IoU)
+- ✅ `deeplabv3_gradcam_crf.pth` - CAM with CRF (0.7181 IoU) ⭐
+
+**Usage**:
+1. Download the ZIP file from Google Drive
+2. Extract to `Trained Weights/` folder in project root
+3. Run evaluation cells in the notebook directly (skip training cells)
+
+```bash
+# Create directory if not exists
+mkdir -p "Trained Weights"
+
+# Extract downloaded weights
+unzip trained_weights.zip -d "Trained Weights/"
+```
+
+**Benefits**:
+- ⏱️ **Save Time**: Skip 2-3 hours of training
+- 💰 **Save Resources**: No GPU required for evaluation only
+- 🎯 **Reproduce Results**: Use exact weights from our experiments
+- 🚀 **Quick Demo**: Test and visualize immediately
+
 ## 📁 Project Structure
 
 ```
