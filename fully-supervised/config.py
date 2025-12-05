@@ -9,7 +9,7 @@ else:
     DEVICE = "cpu" 
 
 # DataLoader kwargs: optimize for GPU if available
-# Note: In Colab, num_workers=2 works better than 4 due to multiprocessing limitations
+# num_workers=2 for optimal performance with multiprocessing
 if DEVICE == 'cuda':
     KWARGS = {'pin_memory': True, 'num_workers': 2}
 elif DEVICE == 'mps':
